@@ -2,8 +2,13 @@ import threading
 import gym
 from gen.PoleChromosome import PoleChromosome
 import numpy
+from multiprocessing.pool import ThreadPool
 
 class ThreadAgent (threading.Thread):
+
+    number_of_executions = 40
+    executionPool = ThreadPool(number_of_executions)
+
     def __init__(self, threadID):
         threading.Thread.__init__(self)
         self.id = threadID
@@ -40,31 +45,52 @@ class ThreadAgent (threading.Thread):
         return self.max_result
 
     @staticmethod
-    def calculate_all_in_one(threadID, genome):
+    def calculateOneGameForGnome(genome):
         env = gym.make('CartPole-v0')
-        observation = env.reset()
-        playing_counter = 0
         actions_counter = 0
         observation = env.reset()
-        results = []
-        while playing_counter < 40:
-            # action = 0 if self.observation[2] < 0 else 1  # 0 - left, 1 - right; Negative angle = pole on left side
+        done = False
+        while done != True:
+
             action = genome.getAction(observation)
+            actions_counter = actions_counter + 1
             # action = 1 # 0 - left, 1 - right; Negative angle = pole on left side
             observation, _, done, _ = env.step(action)
+            # print "action taken" + str(done)
             # print observation
             # print self.observation[3]
             # self.env.render()
             # time.sleep(1)
-            actions_counter = actions_counter + 1
-            if done:
-                results.append(actions_counter)
-                # print "Thread {}: done after {}".format(threadID, actions_counter)
-                playing_counter = playing_counter + 1
-                observation = env.reset()
-                actions_counter = 0
 
+        # print "last observation: " + str(observation)
+        return actions_counter
+
+
+
+
+
+
+
+
+    @staticmethod
+    def calculate_all_in_one_parallelized(genome):
+        results = ThreadAgent.executionPool.map(ThreadAgent.calculateOneGameForGnome, numpy.repeat(genome, ThreadAgent.number_of_executions))
+        # print results
         return numpy.mean(results)
+
+
+
+    @staticmethod
+    def calculate_all_in_one(threadID, genome):
+        # if done:
+        #     # print "Thread {}: done after {}".format(threadID, actions_counter)
+        #     playing_counter = playing_counter + 1
+        #     observation = env.reset()
+        #     print actions_counter
+        #     return actions_counter
+        # results = ThreadAgent.executionPool.map(ThreadAgent.calculateOneGameForGnome, numpy.repeat(genome, ThreadAgent.number_of_executions))
+        # return numpy.mean(results)
+        return ThreadAgent.calculate_all_in_one_parallelized(genome)
 
     @staticmethod
     def break_parameters_names(a):

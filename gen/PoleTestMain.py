@@ -17,11 +17,12 @@ ratio_of_new_genoms = 3
 number_of_new_gnomes = ratio_of_new_genoms * number_of_genomes
 number_of_threads = number_of_genomes + number_of_new_gnomes
 pool = ThreadPool(number_of_threads)
-epochs = 20
+epochs = 200
 chromosomes = []
 for i in range(0,number_of_genomes):
     chromosomes.append(PoleChromosome())
 
+aggregated_results = [30]
 for i in range(0,epochs):
     genoms = []
     for j in range(0, number_of_genomes):
@@ -61,7 +62,10 @@ for i in range(0,epochs):
         chromosomes[i] = genoms[best_matches[i]]
     arr.sort()
     best10 = np.take(arr, [-1,-2,-3,-4,-5,-6,-7,-8,-9,-10])
-    print "average result: " + str(np.mean(best10))
+    best10mean = np.mean(best10)
+    print "average result: " + str(best10mean)
+    aggregated_results.append(best10mean)
+    print aggregated_results
 
 exit(1)
 

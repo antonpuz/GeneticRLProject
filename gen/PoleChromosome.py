@@ -3,12 +3,14 @@ import numpy
 import copy
 import gym
 
+
+
 class PoleChromosome:
     quantizations = 17
-    mutation_prob = 0.5
-    vector_normalization_factor = numpy.floor(quantizations/4)
+    mutation_prob = 0.0
+    vector_normalization_factor = numpy.floor(quantizations/2)
     vector_addition_factor = numpy.floor(quantizations/2)
-    number_of_mutations = numpy.floor(numpy.power(quantizations, 4) * 0.01).astype(int) #1% of weights
+    number_of_mutations = numpy.floor(numpy.power(quantizations, 4) * 0.05).astype(int) #5% of weights
 
     def __init__(self, mode=0, poleA = None, poleB = None):
         self.name = "I am a chromosome"
@@ -71,8 +73,13 @@ class PoleChromosome:
 
     def getAction(self, observation):
         a = numpy.array(observation)
-        a[a>2] = 2
-        a[a<-2] = -2
+        #Normalize the observation vector
+        a[0] = a[0]/2.0
+        a[1] = a[1]/2.0
+        a[2] = a[2]/0.21
+        a[3] = a[3]/2.0
+        a[a>1] = 1
+        a[a<-1] = -1
         e = (numpy.round(a*PoleChromosome.vector_normalization_factor)+PoleChromosome.vector_addition_factor).astype(int)
         return self.action_matrix[e[0], e[1], e[2], e[3]]
 
