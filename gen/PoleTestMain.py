@@ -23,6 +23,7 @@ for i in range(0,number_of_genomes):
     chromosomes.append(PoleChromosome())
 
 aggregated_results = [30]
+improvement_ratio_over_time = []
 for i in range(0,epochs):
     genoms = []
     for j in range(0, number_of_genomes):
@@ -55,6 +56,13 @@ for i in range(0,epochs):
     results = pool.map(ThreadAgent.break_parameters_names, zip(range(0, number_of_threads), genoms))
     print results
     arr = np.array(results)
+    comparing_to_parent = np.reshape(arr, [ratio_of_new_genoms+1, number_of_genomes])
+    improved_chromosomes = float(sum(sum(comparing_to_parent > comparing_to_parent[0,:])))
+    print "improved chromosomes: " + str(improved_chromosomes)
+    improvement_ratio = improved_chromosomes/number_of_new_gnomes
+    print "improvement ratio: " + str(improvement_ratio)
+    improvement_ratio_over_time.append(improvement_ratio)
+    print improvement_ratio_over_time
     best_matches = arr.argsort()[-number_of_genomes:][::-1]
     best_gnome = genoms[best_matches[-1]]
     #best_gnome.play()

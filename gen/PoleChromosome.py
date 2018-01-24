@@ -7,7 +7,7 @@ import gym
 
 class PoleChromosome:
     quantizations = 17
-    mutation_prob = 0.0
+    mutation_prob = 0.5
     vector_normalization_factor = numpy.floor(quantizations/2)
     vector_addition_factor = numpy.floor(quantizations/2)
     number_of_mutations = numpy.floor(numpy.power(quantizations, 4) * 0.05).astype(int) #5% of weights

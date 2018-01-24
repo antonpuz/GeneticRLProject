@@ -41,8 +41,8 @@ class agent():
     def __init__(self, lr, s_size, a_size, h_size):
         # These lines established the feed-forward part of the network. The agent takes a state and produces an action.
         self.state_in = tf.placeholder(shape=[None, s_size], dtype=tf.float32)
-        hidden = slim.fully_connected(self.state_in, h_size, biases_initializer=None, activation_fn=tf.nn.relu)
-        self.output = slim.fully_connected(hidden, a_size, activation_fn=tf.nn.softmax, biases_initializer=None)
+        self.hidden1 = slim.fully_connected(self.state_in, h_size, biases_initializer=None, activation_fn=tf.nn.relu)
+        self.output = slim.fully_connected(self.hidden1, a_size, activation_fn=tf.nn.softmax, biases_initializer=None)
         self.chosen_action = tf.argmax(self.output, 1)
 
         # The next six lines establish the training proceedure. We feed the reward and chosen action into the network
@@ -53,7 +53,8 @@ class agent():
         self.indexes = tf.range(0, tf.shape(self.output)[0]) * tf.shape(self.output)[1] + self.action_holder
         self.responsible_outputs = tf.gather(tf.reshape(self.output, [-1]), self.indexes)
 
-        self.loss = -tf.reduce_mean(tf.log(self.responsible_outputs) * self.reward_holder)
+        # self.loss = -tf.reduce_mean(tf.log(self.responsible_outputs) * self.reward_holder)
+        self.loss = tf.reduce_mean(self.responsible_outputs + self.reward_holder)
 
         tvars = tf.trainable_variables()
         self.gradient_holders = []
@@ -63,17 +64,17 @@ class agent():
 
         self.gradients = tf.gradients(self.loss, tvars)
 
-        optimizer = tf.train.AdamOptimizer(learning_rate=lr)
+        optimizer = tf.train.AdadeltaOptimizer(learning_rate=lr)
         self.update_batch = optimizer.apply_gradients(zip(self.gradient_holders, tvars))
 
 
 tf.reset_default_graph()  # Clear the Tensorflow graph.
 
-myAgent = agent(lr=1e-4, s_size=input_size, a_size=2, h_size=40)  # Load the agent.
+myAgent = agent(lr=1e-4, s_size=input_size, a_size=2, h_size=4)  # Load the agent.
 
 total_episodes = 5000  # Set total number of episodes to train agent on.
 max_ep = 999
-update_frequency = 1
+update_frequency = 3
 
 init = tf.global_variables_initializer()
 
@@ -92,6 +93,7 @@ with tf.Session() as sess:
 
         results = []
         genoms = []
+        success_rate_array = []
         for chrom in range(0, number_of_genomes):
             genoms.append(chromosomes[chrom])
             results.append(ThreadAgent.calculate_all_in_one_parallelized(chromosomes[chrom]))
@@ -102,6 +104,7 @@ with tf.Session() as sess:
             current_chromosome_id = newGenome % number_of_genomes
             current_chromosome = chromosomes[current_chromosome_id]
 
+
             ep_history = []
             new_pole = current_chromosome
             reward_history = []
@@ -110,9 +113,9 @@ with tf.Session() as sess:
 
                 # Probabilistically pick an action given our network outputs.
                 a_dist = sess.run(myAgent.output, feed_dict={myAgent.state_in: [np.ndarray.flatten(new_pole.action_matrix)]})
-                print a_dist
                 a = np.random.choice(a_dist[0], p=a_dist[0])
                 a = np.argmax(a_dist == a)
+
                 if random.random() <= alpha:
                     a = 1-a
 
@@ -136,10 +139,22 @@ with tf.Session() as sess:
                 reward_history.append(r)
                 gnome_history.append(new_pole)
 
+            # print ep_history
+            # print a_dist
+            success_rate_array.append(np.array(ep_history)[:, 2].mean())
+
             ep_history = np.array(ep_history)
             ep_history[:, 2] = discount_rewards(ep_history[:, 2])
             feed_dict = {myAgent.reward_holder: ep_history[:, 2],
                          myAgent.action_holder: ep_history[:, 1], myAgent.state_in: np.vstack(ep_history[:, 0])}
+
+            # print "outputs " + str(sess.run(myAgent.output, feed_dict=feed_dict))
+            # print "actions " + str(sess.run(myAgent.action_holder, feed_dict=feed_dict))
+            # print "indexes " + str(sess.run(myAgent.indexes, feed_dict=feed_dict))
+            # print "responsible_outputs " + str(sess.run(myAgent.responsible_outputs, feed_dict=feed_dict))
+            # print "gradients " + str(sess.run(myAgent.gradients, feed_dict=feed_dict))
+            # print "loss " + str(sess.run(myAgent.loss, feed_dict=feed_dict))
+
             grads = sess.run(myAgent.gradients, feed_dict=feed_dict)
             for idx, grad in enumerate(grads):
                 gradBuffer[idx] += grad
@@ -159,6 +174,9 @@ with tf.Session() as sess:
         arr = np.array(results)
         best_matches = arr.argsort()[-number_of_genomes:][::-1]
         print best_matches
+
+        improvement_rate = np.array(success_rate_array).mean()
+        print "Improvement rate: " + str(improvement_rate)
         # best_gnome = genoms[best_matches[-1]]
         # best_gnome.play()
         for best_gnome in range(0, number_of_genomes):
