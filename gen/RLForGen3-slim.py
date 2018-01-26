@@ -6,6 +6,7 @@ import random
 from PoleChromosome import PoleChromosome
 from gen.ThreadAgent import ThreadAgent
 from multiprocessing.pool import ThreadPool
+import time
 
 env = gym.make('CartPole-v0')
 
@@ -88,6 +89,8 @@ with tf.Session() as sess:
     total_scores = [30]
     total_improvement_rate = []
     total_transformation_prob = np.array([])
+    start = time.time()
+    total_execution_time = []
 
     gradBuffer = sess.run(tf.trainable_variables())
     for ix, grad in enumerate(gradBuffer):
@@ -202,6 +205,10 @@ with tf.Session() as sess:
         print repr(total_transformation_prob)
         print "Improvement rate: "
         print total_improvement_rate
+        end = time.time()
+        print "Execution time: "
+        total_execution_time.append(end - start)
+        print total_execution_time
 
 
         i += update_frequency

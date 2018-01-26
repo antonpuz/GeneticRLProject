@@ -5,6 +5,7 @@ from gen.ThreadAgent import ThreadAgent
 from multiprocessing.pool import ThreadPool
 import numpy as np
 import random
+import time
 
 random.seed(42)
 
@@ -24,6 +25,9 @@ for i in range(0,number_of_genomes):
 
 aggregated_results = [30]
 improvement_ratio_over_time = []
+start = time.time()
+total_execution_time = []
+
 for i in range(0,epochs):
     genoms = []
     for j in range(0, number_of_genomes):
@@ -74,6 +78,10 @@ for i in range(0,epochs):
     print "average result: " + str(best10mean)
     aggregated_results.append(best10mean)
     print aggregated_results
+    end = time.time()
+    print "Execution time: "
+    total_execution_time.append(end - start)
+    print total_execution_time
 
 exit(1)
 
