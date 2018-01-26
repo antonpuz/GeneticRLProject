@@ -26,6 +26,10 @@ genoms = chromosomes
 gamma = 0.95
 alpha = 0.05
 
+total_episodes = 5000  # Set total number of episodes to train agent on.
+max_ep = 999
+update_frequency = 1
+
 def discount_rewards(r):
     """ take 1D float array of rewards and compute discounted reward """
     discounted_r = np.zeros_like(r)
@@ -53,8 +57,10 @@ class agent():
         self.indexes = tf.range(0, tf.shape(self.output)[0]) * tf.shape(self.output)[1] + self.action_holder
         self.responsible_outputs = tf.gather(tf.reshape(self.output, [-1]), self.indexes)
 
-        # self.loss = -tf.reduce_mean(tf.log(self.responsible_outputs) * self.reward_holder)
-        self.loss = tf.reduce_mean(self.responsible_outputs + self.reward_holder)
+        # self.loss = tf.reduce_mean(tf.abs(-self.responsible_outputs + self.reward_holder))
+        # self.loss = tf.reduce_mean(tf.pow(-self.responsible_outputs + self.reward_holder, 2))
+        self.loss = -tf.reduce_mean(tf.log(self.responsible_outputs) * self.reward_holder)
+        # self.loss = tf.reduce_mean(self.responsible_outputs + self.reward_holder)
 
         tvars = tf.trainable_variables()
         self.gradient_holders = []
@@ -72,27 +78,27 @@ tf.reset_default_graph()  # Clear the Tensorflow graph.
 
 myAgent = agent(lr=1e-4, s_size=input_size, a_size=2, h_size=4)  # Load the agent.
 
-total_episodes = 5000  # Set total number of episodes to train agent on.
-max_ep = 999
-update_frequency = 3
-
 init = tf.global_variables_initializer()
 
 # Launch the tensorflow graph
 with tf.Session() as sess:
     sess.run(init)
     i = 0
-    total_reward = []
-    total_lenght = []
+
+    total_scores = [30]
+    total_improvement_rate = []
+    total_transformation_prob = np.array([])
 
     gradBuffer = sess.run(tf.trainable_variables())
     for ix, grad in enumerate(gradBuffer):
         gradBuffer[ix] = grad * 0
 
-    while i < total_episodes:
 
+
+    while i < total_episodes:
         results = []
         genoms = []
+        trans_prob_array = []
         success_rate_array = []
         for chrom in range(0, number_of_genomes):
             genoms.append(chromosomes[chrom])
@@ -113,6 +119,7 @@ with tf.Session() as sess:
 
                 # Probabilistically pick an action given our network outputs.
                 a_dist = sess.run(myAgent.output, feed_dict={myAgent.state_in: [np.ndarray.flatten(new_pole.action_matrix)]})
+                trans_prob_array.append(a_dist)
                 a = np.random.choice(a_dist[0], p=a_dist[0])
                 a = np.argmax(a_dist == a)
 
@@ -134,6 +141,7 @@ with tf.Session() as sess:
                 reward_compared_to_base = 0
                 if results[current_chromosome_id] < r:
                     reward_compared_to_base=1
+
                 ep_history.append([np.ndarray.flatten(new_pole.action_matrix), a, reward_compared_to_base, 0])
 
                 reward_history.append(r)
@@ -144,11 +152,12 @@ with tf.Session() as sess:
             success_rate_array.append(np.array(ep_history)[:, 2].mean())
 
             ep_history = np.array(ep_history)
-            ep_history[:, 2] = discount_rewards(ep_history[:, 2])
+            # ep_history[:, 2] = discount_rewards(ep_history[:, 2])
             feed_dict = {myAgent.reward_holder: ep_history[:, 2],
                          myAgent.action_holder: ep_history[:, 1], myAgent.state_in: np.vstack(ep_history[:, 0])}
 
             # print "outputs " + str(sess.run(myAgent.output, feed_dict=feed_dict))
+            # print "reward " + str(sess.run(myAgent.reward_holder, feed_dict=feed_dict))
             # print "actions " + str(sess.run(myAgent.action_holder, feed_dict=feed_dict))
             # print "indexes " + str(sess.run(myAgent.indexes, feed_dict=feed_dict))
             # print "responsible_outputs " + str(sess.run(myAgent.responsible_outputs, feed_dict=feed_dict))
@@ -170,19 +179,30 @@ with tf.Session() as sess:
             results.append(reward_history[best_match])
             genoms.append(gnome_history[best_match])
 
+        total_transformation_prob = np.append(total_transformation_prob, np.array(trans_prob_array).mean(0))
+
         print results
         arr = np.array(results)
         best_matches = arr.argsort()[-number_of_genomes:][::-1]
         print best_matches
 
         improvement_rate = np.array(success_rate_array).mean()
-        print "Improvement rate: " + str(improvement_rate)
+        total_improvement_rate.append(improvement_rate)
+
         # best_gnome = genoms[best_matches[-1]]
         # best_gnome.play()
         for best_gnome in range(0, number_of_genomes):
             chromosomes[best_gnome] = genoms[best_matches[best_gnome]]
         arr.sort()
         best10 = np.take(arr, [-1, -2, -3, -4, -5, -6, -7, -8, -9, -10])
-        print "average result fro step: " + str(i) + " is :" + str(np.mean(best10))
+        total_scores.append(np.mean(best10))
+        print "average result after step: " + str(i+1)
+        print total_scores
+        print "average transformations probabilities:"
+        print repr(total_transformation_prob)
+        print "Improvement rate: "
+        print total_improvement_rate
+
+
         i += update_frequency
 
