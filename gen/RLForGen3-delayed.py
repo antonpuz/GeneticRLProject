@@ -20,11 +20,15 @@ number_of_threads = number_of_genomes + number_of_new_gnomes
 chromosomes = []
 
 for i in range(0,number_of_genomes):
-    chromosomes.append(PoleChromosome())
+    a = 0  # random assignment
+    if random.random() <= 0.5:
+        a = 1 - a
+    new_chromosome = PoleChromosome()
+    chromosomes.append([new_chromosome, 0, 0, a, new_chromosome])
 
 pool = ThreadPool(number_of_genomes)
 genoms = chromosomes
-gamma = 0.95
+gamma = 0.16
 alpha = 0.05
 
 total_episodes = 5000  # Set total number of episodes to train agent on.
@@ -59,8 +63,8 @@ class agent():
         self.responsible_outputs = tf.gather(tf.reshape(self.output, [-1]), self.indexes)
 
         # self.loss = tf.reduce_mean(tf.abs(-self.responsible_outputs + self.reward_holder))
-        self.loss = tf.reduce_mean(tf.pow(-self.responsible_outputs + self.reward_holder, 2))
-        # self.loss = -tf.reduce_mean(tf.log(self.responsible_outputs) * self.reward_holder)
+        # self.loss = tf.reduce_mean(tf.pow(-self.responsible_outputs + self.reward_holder, 2))
+        self.loss = -tf.reduce_mean(tf.log(self.responsible_outputs) * self.reward_holder)
         # self.loss = tf.reduce_mean(self.responsible_outputs + self.reward_holder)
 
         tvars = tf.trainable_variables()
@@ -77,7 +81,7 @@ class agent():
 
 tf.reset_default_graph()  # Clear the Tensorflow graph.
 
-myAgent = agent(lr=1e-4, s_size=input_size, a_size=3, h_size=4)  # Load the agent.
+myAgent = agent(lr=1e-4, s_size=input_size, a_size=2, h_size=4)  # Load the agent.
 
 init = tf.global_variables_initializer()
 
@@ -97,27 +101,31 @@ with tf.Session() as sess:
         gradBuffer[ix] = grad * 0
 
 
-
     while i < total_episodes:
+
         results = []
         genoms = []
+
+        for chrom in range(0, number_of_genomes):
+            chromosome_evaluation = ThreadAgent.calculate_all_in_one_parallelized(chromosomes[chrom][0])
+            genoms.append([chromosomes[chrom][0], chromosome_evaluation, chromosomes[chrom][2], chromosomes[chrom][3], chromosomes[chrom][4]])
+            results.append(chromosome_evaluation)
+
+        delayed_reward_for_original_group = np.zeros(number_of_genomes)
+
         trans_prob_array = []
         success_rate_array = []
-        for chrom in range(0, number_of_genomes):
-            genoms.append(chromosomes[chrom])
-            results.append(ThreadAgent.calculate_all_in_one_parallelized(chromosomes[chrom]))
-
-        # results = pool.map(ThreadAgent.break_parameters_names, zip(range(0, number_of_genomes), chromosomes))
 
         for newGenome in range (0, number_of_new_gnomes):
             current_chromosome_id = newGenome % number_of_genomes
-            current_chromosome = chromosomes[current_chromosome_id]
-
+            current_chromosome = genoms[current_chromosome_id][0]
 
             ep_history = []
             new_pole = current_chromosome
             reward_history = []
             gnome_history = []
+            latest_action = 0
+            reward_compared_to_base = 0
             for evolution_number in range(0, update_frequency):
 
                 # Probabilistically pick an action given our network outputs.
@@ -126,78 +134,50 @@ with tf.Session() as sess:
                 a = np.random.choice(a_dist[0], p=a_dist[0])
                 a = np.argmax(a_dist == a)
 
-                if random.random() <= alpha and a<2:
+                if random.random() <= alpha:
                     a = 1-a
 
+                latest_action = a
                 if a==0:
                     copiedGen = random.randint(0, number_of_genomes - 1)
                     new_pole = PoleChromosome(2, poleA=new_pole.action_matrix)
                     new_pole.mutate()
-                elif a==1:
+                else:
                     poleB = random.randint(0, number_of_genomes - 1)
                     while current_chromosome_id == poleB:
                         poleB = random.randint(0, number_of_genomes - 1)
-                    new_pole = PoleChromosome(mode=1, poleA=new_pole.action_matrix, poleB=chromosomes[poleB].action_matrix)
-                else: #random opearion
-                    if random.random() <= 0.5:
-                        new_pole = PoleChromosome(2, poleA=new_pole.action_matrix)
-                        new_pole.mutate()
-                    else:
-                        poleB = random.randint(0, number_of_genomes - 1)
-                        while current_chromosome_id == poleB:
-                            poleB = random.randint(0, number_of_genomes - 1)
-                        new_pole = PoleChromosome(mode=1, poleA=new_pole.action_matrix,
-                                                  poleB=chromosomes[poleB].action_matrix)
+                    new_pole = PoleChromosome(mode=1, poleA=new_pole.action_matrix, poleB=genoms[poleB][0].action_matrix)
 
 
                 r = ThreadAgent.calculate_all_in_one_parallelized(new_pole)
-                reward_compared_to_base = -0.1
-                if a==2:
-                    reward_compared_to_base = -0.05
-                elif results[current_chromosome_id] < r:
+                reward_compared_to_base = 0
+                if results[current_chromosome_id] < r:
                     reward_compared_to_base=1
-
-                ep_history.append([np.ndarray.flatten(current_chromosome.action_matrix), a, reward_compared_to_base, 0])
 
                 reward_history.append(r)
                 gnome_history.append(new_pole)
+                success_rate_array.append(reward_compared_to_base)
 
-            # print ep_history
-            # print a_dist
-            success_rate_array.append(np.array(ep_history)[:, 2].mean())
-
-            ep_history = np.array(ep_history)
-            # ep_history[:, 2] = discount_rewards(ep_history[:, 2])
-            feed_dict = {myAgent.reward_holder: ep_history[:, 2],
-                         myAgent.action_holder: ep_history[:, 1], myAgent.state_in: np.vstack(ep_history[:, 0])}
-
-            # print "outputs " + str(sess.run(myAgent.output, feed_dict=feed_dict))
-            # print "reward " + str(sess.run(myAgent.reward_holder, feed_dict=feed_dict))
-            # print "actions " + str(sess.run(myAgent.action_holder, feed_dict=feed_dict))
-            # print "indexes " + str(sess.run(myAgent.indexes, feed_dict=feed_dict))
-            # print "responsible_outputs " + str(sess.run(myAgent.responsible_outputs, feed_dict=feed_dict))
-            # print "gradients " + str(sess.run(myAgent.gradients, feed_dict=feed_dict))
-            # print "loss " + str(sess.run(myAgent.loss, feed_dict=feed_dict))
-
-            grads = sess.run(myAgent.gradients, feed_dict=feed_dict)
-            for idx, grad in enumerate(grads):
-                gradBuffer[idx] += grad
-
-            feed_dict = dictionary = dict(zip(myAgent.gradient_holders, gradBuffer))
-            _ = sess.run(myAgent.update_batch, feed_dict=feed_dict)
-            for ix, grad in enumerate(gradBuffer):
-                gradBuffer[ix] = grad * 0
+            delayed_reward_for_original_group[current_chromosome_id] += reward_compared_to_base
 
             reward_np_arr = np.array(reward_history)
             best_match = reward_np_arr.argsort()[-1:][::-1][0]
 
+            genoms.append([gnome_history[best_match], reward_history[best_match], reward_compared_to_base, latest_action, current_chromosome])
             results.append(reward_history[best_match])
-            genoms.append(gnome_history[best_match])
+
+
+
+        #record delayed rewards
+        for generation_parents in range(0, number_of_genomes):
+            ep_history.append([np.ndarray.flatten(genoms[generation_parents][4].action_matrix), genoms[generation_parents][3], genoms[generation_parents][2]+gamma*delayed_reward_for_original_group[generation_parents], 0])
+
 
         total_transformation_prob = np.append(total_transformation_prob, np.array(trans_prob_array).mean(0))
 
         print results
         arr = np.array(results)
+        all_results = range(0, number_of_threads)
         best_matches = arr.argsort()[-number_of_genomes:][::-1]
         print best_matches
 
@@ -207,7 +187,41 @@ with tf.Session() as sess:
         # best_gnome = genoms[best_matches[-1]]
         # best_gnome.play()
         for best_gnome in range(0, number_of_genomes):
-            chromosomes[best_gnome] = genoms[best_matches[best_gnome]]
+            best_gnomae_index = best_matches[best_gnome]
+            all_results.remove(best_gnomae_index)
+            chromosomes[best_gnome] = genoms[best_gnomae_index]
+            if best_gnomae_index < number_of_genomes: #if it is one of the original 10
+                chromosomes[best_gnome][2] = 0
+
+        for gnome_index in all_results:
+            if gnome_index >= number_of_genomes: #if it is one of the original 10
+                ep_history.append(
+                    [np.ndarray.flatten(genoms[gnome_index][4].action_matrix), genoms[gnome_index][3], genoms[generation_parents][2], 0])
+
+        ep_history = np.array(ep_history)
+        # ep_history[:, 2] = discount_rewards(ep_history[:, 2])
+        feed_dict = {myAgent.reward_holder: ep_history[:, 2],
+                     myAgent.action_holder: ep_history[:, 1], myAgent.state_in: np.vstack(ep_history[:, 0])}
+
+        # print "outputs " + str(sess.run(myAgent.output, feed_dict=feed_dict))
+        # print "reward " + str(sess.run(myAgent.reward_holder, feed_dict=feed_dict))
+        # print "actions " + str(sess.run(myAgent.action_holder, feed_dict=feed_dict))
+        # print "indexes " + str(sess.run(myAgent.indexes, feed_dict=feed_dict))
+        # print "responsible_outputs " + str(sess.run(myAgent.responsible_outputs, feed_dict=feed_dict))
+        # print "gradients " + str(sess.run(myAgent.gradients, feed_dict=feed_dict))
+        # print "loss " + str(sess.run(myAgent.loss, feed_dict=feed_dict))
+
+        grads = sess.run(myAgent.gradients, feed_dict=feed_dict)
+        for idx, grad in enumerate(grads):
+            gradBuffer[idx] += grad
+
+        feed_dict = dictionary = dict(zip(myAgent.gradient_holders, gradBuffer))
+        _ = sess.run(myAgent.update_batch, feed_dict=feed_dict)
+        for ix, grad in enumerate(gradBuffer):
+            gradBuffer[ix] = grad * 0
+
+
+
         arr.sort()
         best10 = np.take(arr, [-1, -2, -3, -4, -5, -6, -7, -8, -9, -10])
         total_scores.append(np.mean(best10))
@@ -221,7 +235,6 @@ with tf.Session() as sess:
         print "Execution time: "
         total_execution_time.append(end - start)
         print total_execution_time
-
 
         i += update_frequency
 

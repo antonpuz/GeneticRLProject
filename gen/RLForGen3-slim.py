@@ -59,8 +59,8 @@ class agent():
         self.responsible_outputs = tf.gather(tf.reshape(self.output, [-1]), self.indexes)
 
         # self.loss = tf.reduce_mean(tf.abs(-self.responsible_outputs + self.reward_holder))
-        # self.loss = tf.reduce_mean(tf.pow(-self.responsible_outputs + self.reward_holder, 2))
-        self.loss = -tf.reduce_mean(tf.log(self.responsible_outputs) * self.reward_holder)
+        self.loss = tf.reduce_mean(tf.pow(-self.responsible_outputs + self.reward_holder, 2))
+        # self.loss = -tf.reduce_mean(tf.log(self.responsible_outputs) * self.reward_holder)
         # self.loss = tf.reduce_mean(self.responsible_outputs + self.reward_holder)
 
         tvars = tf.trainable_variables()
@@ -121,7 +121,7 @@ with tf.Session() as sess:
             for evolution_number in range(0, update_frequency):
 
                 # Probabilistically pick an action given our network outputs.
-                a_dist = sess.run(myAgent.output, feed_dict={myAgent.state_in: [np.ndarray.flatten(new_pole.action_matrix)]})
+                a_dist = sess.run(myAgent.output, feed_dict={myAgent.state_in: [np.ndarray.flatten(current_chromosome.action_matrix)]})
                 trans_prob_array.append(a_dist)
                 a = np.random.choice(a_dist[0], p=a_dist[0])
                 a = np.argmax(a_dist == a)
@@ -145,7 +145,7 @@ with tf.Session() as sess:
                 if results[current_chromosome_id] < r:
                     reward_compared_to_base=1
 
-                ep_history.append([np.ndarray.flatten(new_pole.action_matrix), a, reward_compared_to_base, 0])
+                ep_history.append([np.ndarray.flatten(current_chromosome.action_matrix), a, reward_compared_to_base, 0])
 
                 reward_history.append(r)
                 gnome_history.append(new_pole)
